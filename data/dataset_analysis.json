@@ -1,0 +1,279 @@
+{
+  "total_encounters": 101766,
+  "unique_patients": 71518,
+  "encounters_per_patient": 1.42,
+  "target_counts": {
+    "NO": 54864,
+    ">30": 35545,
+    "<30": 11357
+  },
+  "target_pct": {
+    "NO": 53.91,
+    ">30": 34.93,
+    "<30": 11.16
+  },
+  "terminal_discharges": 2423,
+  "missing_report": {
+    "race": {
+      "missing_count": 2273,
+      "missing_pct": 2.23
+    },
+    "weight": {
+      "missing_count": 98569,
+      "missing_pct": 96.86
+    },
+    "payer_code": {
+      "missing_count": 40256,
+      "missing_pct": 39.56
+    },
+    "medical_specialty": {
+      "missing_count": 49949,
+      "missing_pct": 49.08
+    },
+    "diag_1": {
+      "missing_count": 21,
+      "missing_pct": 0.02
+    },
+    "diag_2": {
+      "missing_count": 358,
+      "missing_pct": 0.35
+    },
+    "diag_3": {
+      "missing_count": 1423,
+      "missing_pct": 1.4
+    },
+    "max_glu_serum": {
+      "missing_count": 96420,
+      "missing_pct": 94.75
+    },
+    "A1Cresult": {
+      "missing_count": 84748,
+      "missing_pct": 83.28
+    }
+  },
+  "age_dist": {
+    "[0-10)": 161,
+    "[10-20)": 691,
+    "[20-30)": 1657,
+    "[30-40)": 3775,
+    "[40-50)": 9685,
+    "[50-60)": 17256,
+    "[60-70)": 22483,
+    "[70-80)": 26068,
+    "[80-90)": 17197,
+    "[90-100)": 2793
+  },
+  "race_dist": {
+    "Caucasian": 76099,
+    "AfricanAmerican": 19210,
+    "Missing/Unknown": 2273,
+    "Hispanic": 2037,
+    "Other": 1506,
+    "Asian": 641
+  },
+  "gender_dist": {
+    "Female": 54708,
+    "Male": 47055,
+    "Unknown/Invalid": 3
+  },
+  "num_stats": {
+    "time_in_hospital": {
+      "mean": 4.4,
+      "median": 4.0,
+      "std": 2.99,
+      "min": 1,
+      "max": 14,
+      "p25": 2.0,
+      "p75": 6.0
+    },
+    "num_lab_procedures": {
+      "mean": 43.1,
+      "median": 44.0,
+      "std": 19.67,
+      "min": 1,
+      "max": 132,
+      "p25": 31.0,
+      "p75": 57.0
+    },
+    "num_procedures": {
+      "mean": 1.34,
+      "median": 1.0,
+      "std": 1.71,
+      "min": 0,
+      "max": 6,
+      "p25": 0.0,
+      "p75": 2.0
+    },
+    "num_medications": {
+      "mean": 16.02,
+      "median": 15.0,
+      "std": 8.13,
+      "min": 1,
+      "max": 81,
+      "p25": 10.0,
+      "p75": 20.0
+    },
+    "number_diagnoses": {
+      "mean": 7.42,
+      "median": 8.0,
+      "std": 1.93,
+      "min": 1,
+      "max": 16,
+      "p25": 6.0,
+      "p75": 9.0
+    },
+    "number_inpatient": {
+      "mean": 0.64,
+      "median": 0.0,
+      "std": 1.26,
+      "min": 0,
+      "max": 21,
+      "p25": 0.0,
+      "p75": 1.0
+    },
+    "number_emergency": {
+      "mean": 0.2,
+      "median": 0.0,
+      "std": 0.93,
+      "min": 0,
+      "max": 76,
+      "p25": 0.0,
+      "p75": 0.0
+    },
+    "number_outpatient": {
+      "mean": 0.37,
+      "median": 0.0,
+      "std": 1.27,
+      "min": 0,
+      "max": 42,
+      "p25": 0.0,
+      "p75": 0.0
+    }
+  },
+  "a1c_dist": {
+    ">8": 8216,
+    "Norm": 4990,
+    ">7": 3812
+  },
+  "glu_dist": {
+    "Norm": 2597,
+    ">200": 1485,
+    ">300": 1264
+  },
+  "change_dist": {
+    "No": 54755,
+    "Ch": 47011
+  },
+  "diab_med_dist": {
+    "Yes": 78363,
+    "No": 23403
+  },
+  "insulin_dist": {
+    "No": 47383,
+    "Steady": 30849,
+    "Down": 12218,
+    "Up": 11316
+  },
+  "prior_inpatient_rates": {
+    "false": {
+      "count": 67630,
+      "mean": 0.08437084134259944
+    },
+    "true": {
+      "count": 34136,
+      "mean": 0.16554370752284978
+    }
+  },
+  "a1c_rates": {
+    ">7": {
+      "count": 3812,
+      "mean": 0.10047219307450157
+    },
+    ">8": {
+      "count": 8216,
+      "mean": 0.09870983446932814
+    },
+    "Norm": {
+      "count": 4990,
+      "mean": 0.09659318637274548
+    }
+  },
+  "change_rates": {
+    "Ch": {
+      "count": 47011,
+      "mean": 0.11822764884814192
+    },
+    "No": {
+      "count": 54755,
+      "mean": 0.10590813624326545
+    }
+  },
+  "age_rates": {
+    "[0-10)": {
+      "count": 161,
+      "mean": 0.018633540372670808
+    },
+    "[10-20)": {
+      "count": 691,
+      "mean": 0.05788712011577424
+    },
+    "[20-30)": {
+      "count": 1657,
+      "mean": 0.1424260712130356
+    },
+    "[30-40)": {
+      "count": 3775,
+      "mean": 0.112317880794702
+    },
+    "[40-50)": {
+      "count": 9685,
+      "mean": 0.10604026845637583
+    },
+    "[50-60)": {
+      "count": 17256,
+      "mean": 0.09666203059805285
+    },
+    "[60-70)": {
+      "count": 22483,
+      "mean": 0.11128408130587555
+    },
+    "[70-80)": {
+      "count": 26068,
+      "mean": 0.11773055086696332
+    },
+    "[80-90)": {
+      "count": 17197,
+      "mean": 0.12083502936558702
+    },
+    "[90-100)": {
+      "count": 2793,
+      "mean": 0.11099176512710347
+    }
+  },
+  "race_rates": {
+    "AfricanAmerican": {
+      "count": 19210,
+      "mean": 0.11218115564809995
+    },
+    "Asian": {
+      "count": 641,
+      "mean": 0.10140405616224649
+    },
+    "Caucasian": {
+      "count": 76099,
+      "mean": 0.11290555723465485
+    },
+    "Hispanic": {
+      "count": 2037,
+      "mean": 0.10407461953853707
+    },
+    "Missing/Unknown": {
+      "count": 2273,
+      "mean": 0.08271007479102507
+    },
+    "Other": {
+      "count": 1506,
+      "mean": 0.09628154050464807
+    }
+  }
+}

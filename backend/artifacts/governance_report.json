@@ -1,0 +1,519 @@
+{
+  "model_comparison": {
+    "logistic_regression": {
+      "threshold": 0.3,
+      "accuracy": 0.1865266466638091,
+      "precision": 0.09593742517359725,
+      "recall": 0.9524564183835182,
+      "roc_auc": 0.6201590360678193,
+      "pr_auc": 0.1565340091287164,
+      "brier_score": 0.23187225344128057,
+      "confusion_matrix": {
+        "tn": 1409,
+        "fp": 11327,
+        "fn": 60,
+        "tp": 1202
+      },
+      "false_positive_workload_pct": 0.889368718592895
+    },
+    "random_forest": {
+      "threshold": 0.3,
+      "accuracy": 0.24996428061151593,
+      "precision": 0.09954044914592908,
+      "recall": 0.9096671949286846,
+      "roc_auc": 0.6078509686407473,
+      "pr_auc": 0.1362467141070785,
+      "brier_score": 0.17592588416390115,
+      "confusion_matrix": {
+        "tn": 2351,
+        "fp": 10385,
+        "fn": 114,
+        "tp": 1148
+      },
+      "false_positive_workload_pct": 0.8154051507537048
+    },
+    "xgboost_calibrated": {
+      "threshold": 0.3,
+      "accuracy": 0.9047006715245035,
+      "precision": 0.3333333333333333,
+      "recall": 0.05705229793977813,
+      "roc_auc": 0.6348937138147155,
+      "pr_auc": 0.16144267729968448,
+      "brier_score": 0.08062621449097798,
+      "confusion_matrix": {
+        "tn": 12592,
+        "fp": 144,
+        "fn": 1190,
+        "tp": 72
+      },
+      "false_positive_workload_pct": 0.011306532663315695
+    },
+    "selected_model": "xgboost_calibrated",
+    "tuned_threshold": 0.3,
+    "risk_tiers": {
+      "low": [
+        0.0,
+        0.25
+      ],
+      "elevated": [
+        0.25,
+        0.45
+      ],
+      "high": [
+        0.45,
+        1.01
+      ]
+    },
+    "metric_rationale": "Recall is prioritised for screening: missing a high-risk patient (false negative) is clinically costlier than a false alarm (false positive). Threshold is tuned to achieve \u226570% recall on training data. Precision and the FP workload percentage are reported so reviewers understand the operational flag rate."
+  },
+  "fairness": {
+    "age_group": {
+      "subgroups": {
+        "30\u201349": {
+          "n": 1906,
+          "n_positive": 154,
+          "positive_rate": 0.080797481636936,
+          "selection_rate": 0.0026232948583420775,
+          "tpr": 0.01948051948051948,
+          "fnr": 0.9805194805194806,
+          "fpr": 0.001141552511415525,
+          "tnr": 0.9988584474885844,
+          "ppv": 0.6,
+          "accuracy": 0.9197271773347324,
+          "small_sample_caution": false,
+          "roc_auc": 0.6232098381070983
+        },
+        "50\u201364": {
+          "n": 2512,
+          "n_positive": 192,
+          "positive_rate": 0.07643312101910828,
+          "selection_rate": 0.006369426751592357,
+          "tpr": 0.020833333333333332,
+          "fnr": 0.9791666666666666,
+          "fpr": 0.005172413793103448,
+          "tnr": 0.9948275862068966,
+          "ppv": 0.25,
+          "accuracy": 0.9203821656050956,
+          "small_sample_caution": false,
+          "roc_auc": 0.6473138918821839
+        },
+        "65\u201379": {
+          "n": 6617,
+          "n_positive": 625,
+          "positive_rate": 0.0944536799153695,
+          "selection_rate": 0.023122260843282453,
+          "tpr": 0.0752,
+          "fnr": 0.9248,
+          "fpr": 0.017690253671562083,
+          "tnr": 0.9823097463284379,
+          "ppv": 0.30718954248366015,
+          "accuracy": 0.8966298927006197,
+          "small_sample_caution": false,
+          "roc_auc": 0.6248842456608812
+        },
+        "80+": {
+          "n": 2576,
+          "n_positive": 274,
+          "positive_rate": 0.1063664596273292,
+          "selection_rate": 0.015527950310559006,
+          "tpr": 0.06569343065693431,
+          "fnr": 0.9343065693430657,
+          "fpr": 0.009556907037358819,
+          "tnr": 0.9904430929626412,
+          "ppv": 0.45,
+          "accuracy": 0.8920807453416149,
+          "small_sample_caution": false,
+          "roc_auc": 0.6309714814791327
+        },
+        "Under 30": {
+          "n": 387,
+          "n_positive": 17,
+          "positive_rate": 0.04392764857881137,
+          "selection_rate": 0.00516795865633075,
+          "tpr": 0.0,
+          "fnr": 1.0,
+          "fpr": 0.005405405405405406,
+          "tnr": 0.9945945945945946,
+          "ppv": 0.0,
+          "accuracy": 0.9509043927648578,
+          "small_sample_caution": false,
+          "roc_auc": 0.647456279809221
+        }
+      },
+      "demographic_parity_difference": 0.020498965984940377,
+      "tpr_gap": 0.0752,
+      "fpr_gap": 0.016548701160146558
+    },
+    "gender": {
+      "subgroups": {
+        "Female": {
+          "n": 7449,
+          "n_positive": 669,
+          "positive_rate": 0.08981071284736206,
+          "selection_rate": 0.018257484226070615,
+          "tpr": 0.0687593423019432,
+          "fnr": 0.9312406576980568,
+          "fpr": 0.01327433628318584,
+          "tnr": 0.9867256637168141,
+          "ppv": 0.3382352941176471,
+          "accuracy": 0.9042824540206739,
+          "small_sample_caution": false,
+          "roc_auc": 0.645580071519593
+        },
+        "Male": {
+          "n": 6549,
+          "n_positive": 593,
+          "positive_rate": 0.09054817529393801,
+          "selection_rate": 0.012215605435944419,
+          "tpr": 0.04384485666104553,
+          "fnr": 0.9561551433389545,
+          "fpr": 0.009066487575554063,
+          "tnr": 0.9909335124244459,
+          "ppv": 0.325,
+          "accuracy": 0.9051763628034815,
+          "small_sample_caution": false,
+          "roc_auc": 0.6229288814997447
+        }
+      },
+      "demographic_parity_difference": 0.006041878790126196,
+      "tpr_gap": 0.02491448564089766,
+      "fpr_gap": 0.004207848707631778
+    },
+    "race": {
+      "subgroups": {
+        "AfricanAmerican": {
+          "n": 2507,
+          "n_positive": 215,
+          "positive_rate": 0.08575987235739928,
+          "selection_rate": 0.007977662544874352,
+          "tpr": 0.018604651162790697,
+          "fnr": 0.9813953488372094,
+          "fpr": 0.006980802792321117,
+          "tnr": 0.9930191972076788,
+          "ppv": 0.2,
+          "accuracy": 0.9094535301156761,
+          "small_sample_caution": false,
+          "roc_auc": 0.6375715329355899
+        },
+        "Asian": {
+          "n": 100,
+          "n_positive": 9,
+          "positive_rate": 0.09,
+          "selection_rate": 0.0,
+          "tpr": 0.0,
+          "fnr": 1.0,
+          "fpr": 0.0,
+          "tnr": 1.0,
+          "ppv": 0.0,
+          "accuracy": 0.91,
+          "small_sample_caution": false,
+          "roc_auc": 0.7228327228327229
+        },
+        "Caucasian": {
+          "n": 10508,
+          "n_positive": 971,
+          "positive_rate": 0.0924057860677579,
+          "selection_rate": 0.01836695850780358,
+          "tpr": 0.06797116374871266,
+          "fnr": 0.9320288362512873,
+          "fpr": 0.013316556569151724,
+          "tnr": 0.9866834434308482,
+          "ppv": 0.34196891191709844,
+          "accuracy": 0.9017891130567187,
+          "small_sample_caution": false,
+          "roc_auc": 0.6293289175542338
+        },
+        "Hispanic": {
+          "n": 288,
+          "n_positive": 23,
+          "positive_rate": 0.0798611111111111,
+          "selection_rate": 0.006944444444444444,
+          "tpr": 0.08695652173913043,
+          "fnr": 0.9130434782608696,
+          "fpr": 0.0,
+          "tnr": 1.0,
+          "ppv": 1.0,
+          "accuracy": 0.9270833333333334,
+          "small_sample_caution": false,
+          "roc_auc": 0.794667760459393
+        },
+        "Other": {
+          "n": 237,
+          "n_positive": 13,
+          "positive_rate": 0.05485232067510549,
+          "selection_rate": 0.004219409282700422,
+          "tpr": 0.0,
+          "fnr": 1.0,
+          "fpr": 0.004464285714285714,
+          "tnr": 0.9955357142857143,
+          "ppv": 0.0,
+          "accuracy": 0.9409282700421941,
+          "small_sample_caution": false,
+          "roc_auc": 0.5606112637362638
+        },
+        "Unknown": {
+          "n": 358,
+          "n_positive": 31,
+          "positive_rate": 0.08659217877094973,
+          "selection_rate": 0.0,
+          "tpr": 0.0,
+          "fnr": 1.0,
+          "fpr": 0.0,
+          "tnr": 1.0,
+          "ppv": 0.0,
+          "accuracy": 0.9134078212290503,
+          "small_sample_caution": false,
+          "roc_auc": 0.6409194041629674
+        }
+      },
+      "demographic_parity_difference": 0.01836695850780358,
+      "tpr_gap": 0.08695652173913043,
+      "fpr_gap": 0.013316556569151724
+    }
+  },
+  "mitigation_comparison": {
+    "method": "ThresholdOptimizer (equalized-odds constraint)",
+    "status": "offline_analysis_only",
+    "note": "ThresholdOptimizer applies subgroup-specific thresholds to reduce equalized-odds gap. It is evaluated here for governance reporting only. Live scoring uses the single global calibrated threshold to avoid unvalidated differential treatment.",
+    "baseline_overall_tpr": 0.05705229793977813,
+    "baseline_overall_fpr": 0.011228015075376884,
+    "mitigation_tradeoff": "Equalizing TPR across subgroups typically reduces overall recall slightly while reducing disparity. The specific trade-off depends on the subgroup composition of the operational cohort."
+  },
+  "feature_importances": [
+    {
+      "feature": "diag_2_cat_Circulatory",
+      "importance": 0.06971889734268188
+    },
+    {
+      "feature": "A1Cresult_Unknown",
+      "importance": 0.06188085302710533
+    },
+    {
+      "feature": "age_mid",
+      "importance": 0.05332211032509804
+    },
+    {
+      "feature": "diag_3_cat_Circulatory",
+      "importance": 0.051217496395111084
+    },
+    {
+      "feature": "diag_1_cat_Circulatory",
+      "importance": 0.04750045761466026
+    },
+    {
+      "feature": "race_Caucasian",
+      "importance": 0.04647522419691086
+    },
+    {
+      "feature": "discharge_disposition_id_1",
+      "importance": 0.04343262314796448
+    },
+    {
+      "feature": "diag_2_cat_Endocrine/Metabolic",
+      "importance": 0.03579305484890938
+    },
+    {
+      "feature": "discharge_disposition_id_6",
+      "importance": 0.03285493701696396
+    },
+    {
+      "feature": "time_in_hospital",
+      "importance": 0.03185349702835083
+    },
+    {
+      "feature": "num_active_meds",
+      "importance": 0.0313691645860672
+    },
+    {
+      "feature": "diag_3_cat_Endocrine/Metabolic",
+      "importance": 0.02999931015074253
+    },
+    {
+      "feature": "admission_source_id_7",
+      "importance": 0.020681822672486305
+    },
+    {
+      "feature": "num_procedures",
+      "importance": 0.020358216017484665
+    },
+    {
+      "feature": "discharge_disposition_id_3",
+      "importance": 0.018974998965859413
+    }
+  ],
+  "data_quality": {
+    "total_raw": 69990,
+    "after_filters": 69990,
+    "terminal_excluded": 0,
+    "train_size": 55992,
+    "test_size": 13998,
+    "positive_rate_train": 0.08970924417773968,
+    "positive_rate_test": 0.09015573653379054,
+    "after_smote_train_size": 101938,
+    "outlier_caps": {
+      "age_mid": [
+        25.0,
+        105.0
+      ],
+      "time_in_hospital": [
+        -4.0,
+        12.0
+      ],
+      "num_lab_procedures": [
+        -8.0,
+        96.0
+      ],
+      "num_procedures": [
+        -3.0,
+        5.0
+      ],
+      "num_medications": [
+        -5.0,
+        35.0
+      ],
+      "number_diagnoses": [
+        1.5,
+        13.5
+      ],
+      "num_active_meds": [
+        -0.5,
+        3.5
+      ],
+      "prior_visits": [
+        -1.5,
+        2.5
+      ]
+    }
+  },
+  "feature_names": [
+    "age_mid",
+    "time_in_hospital",
+    "num_lab_procedures",
+    "num_procedures",
+    "num_medications",
+    "number_diagnoses",
+    "num_active_meds",
+    "prior_visits",
+    "diag_1_cat_Blood",
+    "diag_1_cat_Circulatory",
+    "diag_1_cat_Congenital",
+    "diag_1_cat_Digestive",
+    "diag_1_cat_Endocrine/Metabolic",
+    "diag_1_cat_External/Supplemental",
+    "diag_1_cat_Genitourinary",
+    "diag_1_cat_Infectious",
+    "diag_1_cat_Injury/Poisoning",
+    "diag_1_cat_Mental",
+    "diag_1_cat_Musculoskeletal",
+    "diag_1_cat_Neoplasms",
+    "diag_1_cat_Nervous",
+    "diag_1_cat_Perinatal/Ill-defined",
+    "diag_1_cat_Pregnancy",
+    "diag_1_cat_Respiratory",
+    "diag_1_cat_Skin",
+    "diag_1_cat_Unknown",
+    "diag_2_cat_Blood",
+    "diag_2_cat_Circulatory",
+    "diag_2_cat_Congenital",
+    "diag_2_cat_Digestive",
+    "diag_2_cat_Endocrine/Metabolic",
+    "diag_2_cat_External/Supplemental",
+    "diag_2_cat_Genitourinary",
+    "diag_2_cat_Infectious",
+    "diag_2_cat_Injury/Poisoning",
+    "diag_2_cat_Mental",
+    "diag_2_cat_Musculoskeletal",
+    "diag_2_cat_Neoplasms",
+    "diag_2_cat_Nervous",
+    "diag_2_cat_Perinatal/Ill-defined",
+    "diag_2_cat_Pregnancy",
+    "diag_2_cat_Respiratory",
+    "diag_2_cat_Skin",
+    "diag_2_cat_Unknown",
+    "diag_3_cat_Blood",
+    "diag_3_cat_Circulatory",
+    "diag_3_cat_Congenital",
+    "diag_3_cat_Digestive",
+    "diag_3_cat_Endocrine/Metabolic",
+    "diag_3_cat_External/Supplemental",
+    "diag_3_cat_Genitourinary",
+    "diag_3_cat_Infectious",
+    "diag_3_cat_Injury/Poisoning",
+    "diag_3_cat_Mental",
+    "diag_3_cat_Musculoskeletal",
+    "diag_3_cat_Neoplasms",
+    "diag_3_cat_Nervous",
+    "diag_3_cat_Perinatal/Ill-defined",
+    "diag_3_cat_Pregnancy",
+    "diag_3_cat_Respiratory",
+    "diag_3_cat_Skin",
+    "diag_3_cat_Unknown",
+    "gender_Female",
+    "gender_Male",
+    "gender_Unknown/Invalid",
+    "race_AfricanAmerican",
+    "race_Asian",
+    "race_Caucasian",
+    "race_Hispanic",
+    "race_Other",
+    "race_Unknown",
+    "admission_type_id_1",
+    "admission_type_id_2",
+    "admission_type_id_3",
+    "admission_type_id_4",
+    "admission_type_id_5",
+    "admission_type_id_6",
+    "admission_type_id_7",
+    "admission_type_id_8",
+    "discharge_disposition_id_1",
+    "discharge_disposition_id_10",
+    "discharge_disposition_id_12",
+    "discharge_disposition_id_15",
+    "discharge_disposition_id_16",
+    "discharge_disposition_id_17",
+    "discharge_disposition_id_18",
+    "discharge_disposition_id_2",
+    "discharge_disposition_id_22",
+    "discharge_disposition_id_23",
+    "discharge_disposition_id_24",
+    "discharge_disposition_id_25",
+    "discharge_disposition_id_27",
+    "discharge_disposition_id_28",
+    "discharge_disposition_id_3",
+    "discharge_disposition_id_4",
+    "discharge_disposition_id_5",
+    "discharge_disposition_id_6",
+    "discharge_disposition_id_7",
+    "discharge_disposition_id_8",
+    "discharge_disposition_id_9",
+    "admission_source_id_1",
+    "admission_source_id_10",
+    "admission_source_id_11",
+    "admission_source_id_13",
+    "admission_source_id_14",
+    "admission_source_id_17",
+    "admission_source_id_2",
+    "admission_source_id_20",
+    "admission_source_id_22",
+    "admission_source_id_25",
+    "admission_source_id_3",
+    "admission_source_id_4",
+    "admission_source_id_5",
+    "admission_source_id_6",
+    "admission_source_id_7",
+    "admission_source_id_8",
+    "admission_source_id_9",
+    "max_glu_serum_>200",
+    "max_glu_serum_>300",
+    "max_glu_serum_Norm",
+    "max_glu_serum_Unknown",
+    "A1Cresult_>7",
+    "A1Cresult_>8",
+    "A1Cresult_Norm",
+    "A1Cresult_Unknown",
+    "any_med_change",
+    "a1c_tested",
+    "primary_diab",
+    "diabetesMed"
+  ]
+}
