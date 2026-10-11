@@ -95,7 +95,7 @@ export default function App() {
                 title={`API: ${health.status}`}
               />
               <span>
-                {health.model_loaded ? 'Model v1.0.0 Online' : 'No Model'}
+                {health.model_loaded ? `Champion v${health.model_version || '3.0.0'} Online` : 'No Model'}
               </span>
             </div>
           )}

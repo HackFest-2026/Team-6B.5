@@ -1,18 +1,18 @@
 {
   "model_version": "3.0.0-champion",
   "model_type": "Clinical RNN + RL Policy Agent (Champion Model)",
-  "threshold": 0.35,
+  "threshold": 0.25,
   "risk_tiers": {
     "low": [
       0.0,
-      0.12
+      0.25
     ],
     "elevated": [
-      0.12,
-      0.2
+      0.25,
+      0.5
     ],
     "high": [
-      0.2,
+      0.5,
       1.01
     ]
   },
