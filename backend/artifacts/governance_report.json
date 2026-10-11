@@ -163266,7 +163266,15 @@
       "recall": 0.7147385103011094,
       "f1": 0.1803639272145571,
       "balanced_accuracy": 0.5496588280148763,
-      "brier_score": 0.18856705719864741
+      "brier_score": 0.18856705719864741,
+      "accuracy": 0.4143,
+      "roc_auc": 0.5649034034574616,
+      "confusion_matrix": {
+        "tn": 4898,
+        "fp": 7838,
+        "fn": 360,
+        "tp": 902
+      }
     },
     "ClinicalRNN_RL_Champion": {
       "model": "Clinical RNN + RL Policy (Champion)",
