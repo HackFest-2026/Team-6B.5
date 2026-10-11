@@ -21,25 +21,45 @@ function MetricRow({ label, value, highlight }) {
 }
 
 function ModelCard({ name, metrics, selected }) {
-  if (!metrics || !metrics.roc_auc) return null
+  if (!metrics || (!metrics.roc_auc && !metrics.auroc)) return null
   const pct = v => `${(v * 100).toFixed(1)}%`
+  const isChampion = selected || metrics.is_champion || name.toLowerCase().includes('champion')
   return (
     <div className="card" style={{
-      border: selected ? '1px solid var(--color-accent)' : undefined,
-      boxShadow: selected ? 'var(--shadow-glow-accent)' : undefined,
+      border: isChampion ? '2px solid var(--color-accent)' : undefined,
+      boxShadow: isChampion ? 'var(--shadow-glow-accent)' : undefined,
+      position: 'relative',
     }}>
+      {isChampion && (
+        <div style={{
+          position: 'absolute',
+          top: -10,
+          right: 14,
+          background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+          color: '#fff',
+          fontSize: 11,
+          fontWeight: 700,
+          padding: '2px 10px',
+          borderRadius: 12,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+          letterSpacing: 0.5
+        }}>
+          ★ CHAMPION MODEL
+        </div>
+      )}
       <div className="card-header">
         <div>
           <div className="card-title">{name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>
-          {selected && <div style={{ fontSize: 11, color: 'var(--color-accent-light)', marginTop: 2 }}>✓ Selected model for live scoring</div>}
+          {isChampion && <div style={{ fontSize: 11, color: 'var(--color-accent-light)', marginTop: 2 }}>✓ Selected model for live scoring (Highest Metrics)</div>}
         </div>
       </div>
       <div className="card-body">
-        <MetricRow label="ROC-AUC" value={metrics.roc_auc?.toFixed(3)} highlight />
+        <MetricRow label="ROC-AUC" value={(metrics.roc_auc || metrics.auroc)?.toFixed(3)} highlight />
         <MetricRow label="PR-AUC" value={metrics.pr_auc?.toFixed(3)} />
         <MetricRow label="Recall" value={pct(metrics.recall)} highlight />
         <MetricRow label="Precision" value={pct(metrics.precision)} />
-        <MetricRow label="Accuracy" value={pct(metrics.accuracy)} />
+        <MetricRow label="Accuracy" value={pct(metrics.accuracy)} highlight={isChampion} />
+        <MetricRow label="F1-Score" value={pct(metrics.f1 || metrics.f1_score || 0)} highlight={isChampion} />
         <MetricRow label="Brier Score" value={metrics.brier_score?.toFixed(4)} />
         <MetricRow label="Threshold" value={metrics.threshold?.toFixed(2)} />
         {metrics.confusion_matrix && (
@@ -308,22 +328,31 @@ export default function Governance({ initialTab = 0 }) {
                       <ResponsiveContainer width="100%" height={220}>
                         <BarChart
                           data={modelNames.map(name => ({
-                            name: name.replace(/_/g, ' ').replace('logistic', 'LR').replace('random forest', 'RF').replace('xgboost calibrated', 'XGB'),
-                            'ROC-AUC': +(modelComparison[name]?.roc_auc * 100 || 0).toFixed(1),
+                            name: name.replace(/_/g, ' ')
+                              .replace('ClinicalRNN RL Champion', '🏆 Champion')
+                              .replace('RL Balanced Screening', 'RL Screening')
+                              .replace('Tuned RNN GRU', 'RNN (GRU)')
+                              .replace('logistic', 'LR')
+                              .replace('random forest', 'RF')
+                              .replace('xgboost calibrated', 'XGB')
+                              .replace('CalibratedEnsemble', 'Ensemble'),
+                            'ROC-AUC': +((modelComparison[name]?.roc_auc || modelComparison[name]?.auroc || 0) * 100).toFixed(1),
                             Recall: +(modelComparison[name]?.recall * 100 || 0).toFixed(1),
                             Precision: +(modelComparison[name]?.precision * 100 || 0).toFixed(1),
+                            'F1-Score': +((modelComparison[name]?.f1 || modelComparison[name]?.f1_score || 0) * 100).toFixed(1),
                             'PR-AUC': +(modelComparison[name]?.pr_auc * 100 || 0).toFixed(1),
                           }))}
-                          barSize={22}
+                          barSize={18}
                         >
                           <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }} />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
                           <YAxis unit="%" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} domain={[0, 100]} />
                           <Tooltip contentStyle={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', borderRadius: 8 }} />
                           <Legend wrapperStyle={{ fontSize: 11 }} />
                           <Bar dataKey="ROC-AUC" fill="var(--color-accent)" radius={[3, 3, 0, 0]} />
                           <Bar dataKey="Recall" fill="var(--color-risk-high)" radius={[3, 3, 0, 0]} />
                           <Bar dataKey="Precision" fill="var(--color-risk-elevated)" radius={[3, 3, 0, 0]} />
+                          <Bar dataKey="F1-Score" fill="#10b981" radius={[3, 3, 0, 0]} />
                           <Bar dataKey="PR-AUC" fill="var(--color-risk-low)" radius={[3, 3, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>

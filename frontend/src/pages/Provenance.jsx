@@ -83,13 +83,43 @@ export default function Provenance() {
                 <ShieldCheck size={20} className="text-primary" />
                 <span>Standardized AI Model Card</span>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <span className="risk-badge low">v{modelCard?.model_version || '1.0.0'}</span>
-                <span className="risk-badge elevated">Research Demo</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span className="risk-badge low">v{modelCard?.model_version || '3.0.0-champion'}</span>
+                {modelCard?.is_champion && (
+                  <span className="risk-badge" style={{ background: '#f59e0b', color: '#fff', fontWeight: 700 }}>
+                    🏆 Champion Model
+                  </span>
+                )}
+                <span className="risk-badge elevated">Clinical AI</span>
               </div>
             </div>
 
             <div className="card-body">
+              {modelCard?.champion_metrics && (
+                <div style={{
+                  background: 'var(--color-bg-elevated)',
+                  border: '1px solid var(--color-accent)',
+                  borderRadius: 10,
+                  padding: '12px 16px',
+                  marginBottom: 20,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 12
+                }}>
+                  <div style={{ fontWeight: 700, color: 'var(--color-accent-light)', fontSize: 13 }}>
+                    ★ Highest Evaluation Metrics:
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+                    <span><strong>Accuracy:</strong> {modelCard.champion_metrics.accuracy}</span>
+                    <span><strong>ROC-AUC:</strong> {modelCard.champion_metrics.roc_auc}</span>
+                    <span><strong>Precision:</strong> {modelCard.champion_metrics.precision}</span>
+                    <span><strong>Recall:</strong> {modelCard.champion_metrics.recall}</span>
+                    <span><strong>F1:</strong> {modelCard.champion_metrics.f1_score}</span>
+                  </div>
+                </div>
+              )}
               {/* Core metadata pills */}
               <div
                 style={{

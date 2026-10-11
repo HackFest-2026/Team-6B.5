@@ -77,7 +77,10 @@ export default function Overview({ onNavigate }) {
           </div>
           <div className="flex items-center gap-3">
             {summary && (
-              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="risk-badge" style={{ background: '#f59e0b', color: '#fff', fontSize: 10, padding: '2px 8px', fontWeight: 700 }}>
+                  🏆 Champion Model
+                </span>
                 Model v{summary.model_version} · Threshold {(summary.threshold * 100).toFixed(0)}%
               </span>
             )}

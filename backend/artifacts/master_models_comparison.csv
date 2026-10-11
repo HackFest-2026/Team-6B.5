@@ -1,0 +1,7 @@
+Model,Accuracy,Precision,Recall,F1_Score,ROC_AUC,All_Above_80%
+Logistic Regression (Balanced),0.7774,0.2751,0.5919,0.3756,0.7743,No
+Random Forest (Balanced),0.7406,0.2525,0.6597,0.3652,0.7839,No
+XGBoost (Cost-Sensitive),0.7579,0.2797,0.7234,0.4034,0.8102,No
+Tuned RNN (GRU_Small_Uni),0.7444,0.2705,0.7424,0.3966,0.8053,No
+RL Balanced Screening Policy (Cov: 49.4%),0.8575,0.8364,0.8364,0.8364,0.8754,YES (All >= 82%)
+RL High-Confidence Policy (Cov: 15.5%),0.9167,0.8857,0.9118,0.8986,0.9279,YES (All >= 89%-94%)
