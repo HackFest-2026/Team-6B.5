@@ -1,0 +1,116 @@
+{
+  "architecture": {
+    "input_dim": 2,
+    "hidden_units": 64,
+    "activation": "tanh",
+    "policy_updates": 1700,
+    "mlp_hidden_units": 64,
+    "mlp_epochs": 60
+  },
+  "smote": {
+    "strategy": 1.0,
+    "scope": "training folds only"
+  },
+  "blend_xgb_weight": 0.8500000000000001,
+  "selected_policy_episode": 1125,
+  "results": {
+    "SMOTE XGBoost": {
+      "validation": {
+        "threshold": 0.4244118630886078,
+        "accuracy": 0.9109872838976997,
+        "precision": 0.6666666666666666,
+        "recall": 0.012759170653907496,
+        "f1": 0.025039123630672927,
+        "roc_auc": 0.6196760448172878,
+        "pr_auc": 0.14784697367657157,
+        "brier_score": 0.08316389399374702,
+        "positive_predictions": 12
+      },
+      "test": {
+        "threshold": 0.4244118630886078,
+        "accuracy": 0.909129875696528,
+        "precision": 0.3076923076923077,
+        "recall": 0.006339144215530904,
+        "f1": 0.012422360248447204,
+        "roc_auc": 0.6246489106586817,
+        "pr_auc": 0.1547954056103163,
+        "brier_score": 0.08316466801658468,
+        "positive_predictions": 26
+      }
+    },
+    "SMOTE MLP (64 hidden)": {
+      "validation": {
+        "threshold": 0.9549012715420406,
+        "accuracy": 0.9105586512358909,
+        "precision": 1.0,
+        "recall": 0.001594896331738437,
+        "f1": 0.0031847133757961785,
+        "roc_auc": 0.6052333724798786,
+        "pr_auc": 0.13840900072070395,
+        "brier_score": 0.18423758227793022,
+        "positive_predictions": 1
+      },
+      "test": {
+        "threshold": 0.9549012715420406,
+        "accuracy": 0.9099871410201458,
+        "precision": 1.0,
+        "recall": 0.001584786053882726,
+        "f1": 0.0031645569620253164,
+        "roc_auc": 0.6199669106228448,
+        "pr_auc": 0.15601910486707454,
+        "brier_score": 0.18079886530095945,
+        "positive_predictions": 2
+      }
+    },
+    "Validation-weighted XGBoost+MLP": {
+      "validation": {
+        "threshold": 0.4943443250318176,
+        "accuracy": 0.9107015287898271,
+        "precision": 0.6,
+        "recall": 0.009569377990430622,
+        "f1": 0.018838304552590265,
+        "roc_auc": 0.6233091145371847,
+        "pr_auc": 0.14991274228720014,
+        "brier_score": 0.08832412947887648,
+        "positive_predictions": 10
+      },
+      "test": {
+        "threshold": 0.4943443250318176,
+        "accuracy": 0.9093441920274324,
+        "precision": 0.3157894736842105,
+        "recall": 0.004754358161648178,
+        "f1": 0.00936768149882904,
+        "roc_auc": 0.6334154429039014,
+        "pr_auc": 0.16212839840516452,
+        "brier_score": 0.08792886426445974,
+        "positive_predictions": 19
+      }
+    },
+    "Policy-gradient XGBoost+MLP": {
+      "validation": {
+        "threshold": 0.9999999845752174,
+        "accuracy": 0.9109872838976997,
+        "precision": 0.6666666666666666,
+        "recall": 0.012759170653907496,
+        "f1": 0.025039123630672927,
+        "roc_auc": 0.622858578850253,
+        "pr_auc": 0.14991044496429992,
+        "brier_score": 0.36423572769493395,
+        "positive_predictions": 12
+      },
+      "test": {
+        "threshold": 0.9999999845752174,
+        "accuracy": 0.909129875696528,
+        "precision": 0.3076923076923077,
+        "recall": 0.006339144215530904,
+        "f1": 0.012422360248447204,
+        "roc_auc": 0.6300547408197883,
+        "pr_auc": 0.1573609472432545,
+        "brier_score": 0.36818903957246646,
+        "positive_predictions": 26
+      }
+    }
+  },
+  "test_positive_rate": 0.09015573653379054,
+  "note": "Candidate is not automatically promoted; accuracy is paired with recall and PR-AUC."
+}

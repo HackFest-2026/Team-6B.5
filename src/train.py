@@ -10,10 +10,10 @@ Usage
 Pipeline
 --------
 1. Download / verify the UCI Diabetes 130-US Hospitals dataset.
-2. Apply preprocessing, patient-grouped 70/10/20 split, SMOTE.
-3. Optuna-tune LightGBM, XGBoost, CatBoost (50 trials each, PR-AUC).
-4. Build calibrated soft-voting ensemble.
-5. Optimize threshold on validation set.
+2. Apply preprocessing and a patient-grouped 70/10/20 split.
+3. Tune Logistic Regression, Random Forest, and XGBoost with grouped CV and fold-local SMOTE.
+4. Calibrate each candidate on validation data and select by validation ROC-AUC/Brier score.
+5. Optimize the decision threshold on validation data.
 6. Final evaluation on held-out test set with bootstrap CIs.
 7. LACE score baseline comparison.
 8. Fairness audit.
@@ -311,10 +311,11 @@ def run_training():
 
     print(f"\n[train] X_train: {X_train.shape} | X_val: {X_val.shape} | X_test: {X_test.shape}")
 
-    # ── Model comparison + Optuna tuning ──────────────────────────────────
+    # ── Model comparison + grouped grid search ────────────────────────────
     comparison, final_model, threshold, all_models = compare_models(
         X_train, y_train, X_val, y_val, X_test, y_test,
         n_optuna_trials=50,
+        groups_train=pipeline_outputs["groups_train"],
     )
 
     # ── Feature names after preprocessing ─────────────────────────────────
@@ -331,10 +332,12 @@ def run_training():
     lace_result = evaluate_lace_baseline(lace_scores, y_test.values)
     comparison["lace_baseline"] = lace_result
     print(f"[train] LACE baseline: AUROC={lace_result['auroc']:.4f} | F1={lace_result['f1']:.4f}")
-    print(f"[train] ML ensemble improvement over LACE:")
-    ens_metrics = [r for r in comparison["results"] if r["model"] == "CalibratedEnsemble"][0]
-    print(f"  AUROC: {ens_metrics['auroc']:.4f} vs {lace_result['auroc']:.4f} "
-          f"(+{ens_metrics['auroc'] - lace_result['auroc']:.4f})")
+    selected_metrics = next(
+        row for row in comparison["results"] if row["model"] == comparison["selected_model"]
+    )
+    print(f"[train] {comparison['selected_model']} improvement over LACE:")
+    print(f"  AUROC: {selected_metrics['auroc']:.4f} vs {lace_result['auroc']:.4f} "
+          f"({selected_metrics['auroc'] - lace_result['auroc']:+.4f})")
 
     # ── Fairness audit ────────────────────────────────────────────────────
     print("\n[train] Running fairness audit...")
@@ -382,13 +385,13 @@ def run_training():
     print("\n" + "=" * 60)
     print("   TRAINING COMPLETE")
     print("=" * 60)
-    print(f"  Selected model : Calibrated Ensemble (LightGBM+XGBoost+CatBoost)")
+    print(f"  Selected model : {comparison['selected_model']}")
     print(f"  Threshold      : {threshold:.3f}")
-    print(f"  Test AUROC     : {ens_metrics['auroc']:.4f}")
-    print(f"  Test PR-AUC    : {ens_metrics['pr_auc']:.4f}")
-    print(f"  Test Recall    : {ens_metrics['recall']:.3f}")
-    print(f"  Test Precision : {ens_metrics['precision']:.3f}")
-    print(f"  Test F1        : {ens_metrics['f1']:.3f}")
+    print(f"  Test AUROC     : {selected_metrics['auroc']:.4f}")
+    print(f"  Test PR-AUC    : {selected_metrics['pr_auc']:.4f}")
+    print(f"  Test Recall    : {selected_metrics['recall']:.3f}")
+    print(f"  Test Precision : {selected_metrics['precision']:.3f}")
+    print(f"  Test F1        : {selected_metrics['f1']:.3f}")
     print(f"  LACE baseline  : AUROC={lace_result['auroc']:.4f}")
     print(f"  Artifacts      : {ARTIFACTS_DIR}")
 

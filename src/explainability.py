@@ -92,13 +92,11 @@ def explain_instance(
             import shap
             # Unwrap model for tree explainer
             tree_model = model
-            if hasattr(tree_model, "models"):
-                tree_model = (
-                    tree_model.models.get("LightGBM")
-                    or tree_model.models.get("XGBoost")
-                    or list(tree_model.models.values())[0]
-                )
-            elif hasattr(tree_model, "estimator"):
+            if hasattr(tree_model, "base_model"):
+                tree_model = tree_model.base_model
+            if hasattr(tree_model, "named_steps"):
+                tree_model = tree_model.named_steps.get("classifier", tree_model)
+            if hasattr(tree_model, "estimator"):
                 tree_model = getattr(tree_model.estimator, "estimator", tree_model.estimator)
             elif hasattr(tree_model, "calibrated_classifiers_") and len(tree_model.calibrated_classifiers_) > 0:
                 tree_model = getattr(tree_model.calibrated_classifiers_[0], "estimator", tree_model)
@@ -144,15 +142,13 @@ def explain_instance(
 
     # Fallback: use global feature importances
     try:
-        if hasattr(model, "feature_importances_"):
-            importances = model.feature_importances_
-        elif hasattr(model, "models"):
-            first_m = (
-                model.models.get("LightGBM")
-                or model.models.get("XGBoost")
-                or list(model.models.values())[0]
-            )
-            importances = getattr(first_m, "feature_importances_", None)
+        importance_model = getattr(model, "base_model", model)
+        if hasattr(importance_model, "named_steps"):
+            importance_model = importance_model.named_steps.get("classifier", importance_model)
+        if hasattr(importance_model, "feature_importances_"):
+            importances = importance_model.feature_importances_
+        elif hasattr(importance_model, "coef_"):
+            importances = np.abs(importance_model.coef_).mean(axis=0)
         elif hasattr(model, "estimators_"):
             importances = model.estimators_[0].feature_importances_
         else:

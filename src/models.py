@@ -1,16 +1,13 @@
 """
 models.py
 =========
-Train, tune (Optuna), calibrate, and ensemble models for readmission prediction.
+Train, tune, calibrate, and compare Logistic Regression, Random Forest, and XGBoost.
 
 Models
 ------
 1. Logistic Regression (baseline)
 2. Random Forest (baseline)
-3. LightGBM (Optuna-tuned, 50+ trials, PR-AUC objective)
-4. XGBoost  (Optuna-tuned, 50+ trials, PR-AUC objective)
-5. CatBoost (Optuna-tuned, 50+ trials, PR-AUC objective)
-6. Soft-voting ensemble of best boosters → isotonic calibration
+3. XGBoost (grouped-CV tuned with SMOTE confined to training folds)
 
 Threshold
 ---------
@@ -32,9 +29,13 @@ from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
-from sklearn.calibration import CalibratedClassifierCV, calibration_curve
+from sklearn.calibration import calibration_curve
+from sklearn.base import clone
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV, StratifiedGroupKFold
+from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline as ImbalancedPipeline
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
@@ -49,7 +50,6 @@ from sklearn.metrics import (
     roc_curve,
 )
 import xgboost as xgb
-import lightgbm as lgb
 import joblib
 
 warnings.filterwarnings("ignore")
@@ -182,159 +182,6 @@ def train_random_forest(X_train, y_train):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# OPTUNA-TUNED BOOSTERS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _optuna_tune_lgbm(X_train, y_train, X_val, y_val, n_trials: int = 50):
-    """Tune LightGBM with Optuna, optimizing PR-AUC on validation set."""
-    import optuna
-    optuna.logging.set_verbosity(optuna.logging.WARNING)
-
-    def objective(trial):
-        params = {
-            "n_estimators": trial.suggest_int("n_estimators", 100, 600),
-            "max_depth": trial.suggest_int("max_depth", 3, 10),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
-            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "min_child_samples": trial.suggest_int("min_child_samples", 5, 100),
-            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
-            "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
-            "num_leaves": trial.suggest_int("num_leaves", 20, 150),
-            "is_unbalance": True,
-            "random_state": RANDOM_STATE,
-            "verbose": -1,
-            "n_jobs": -1,
-        }
-        model = lgb.LGBMClassifier(**params)
-        model.fit(X_train, y_train)
-        y_prob = model.predict_proba(X_val)[:, 1]
-        return average_precision_score(y_val, y_prob)
-
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
-    print(f"[models] LightGBM best PR-AUC: {study.best_value:.4f} ({len(study.trials)} trials)")
-
-    best_params = study.best_params
-    best_params.update({"is_unbalance": True, "random_state": RANDOM_STATE, "verbose": -1, "n_jobs": -1})
-    model = lgb.LGBMClassifier(**best_params)
-    model.fit(X_train, y_train)
-    return model, best_params
-
-
-def _optuna_tune_xgb(X_train, y_train, X_val, y_val, n_trials: int = 50):
-    """Tune XGBoost with Optuna, optimizing PR-AUC on validation set."""
-    import optuna
-    optuna.logging.set_verbosity(optuna.logging.WARNING)
-
-    scale_pos_weight = float((y_train == 0).sum() / max((y_train == 1).sum(), 1))
-
-    def objective(trial):
-        params = {
-            "n_estimators": trial.suggest_int("n_estimators", 100, 600),
-            "max_depth": trial.suggest_int("max_depth", 3, 10),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
-            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "min_child_weight": trial.suggest_int("min_child_weight", 1, 20),
-            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
-            "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
-            "gamma": trial.suggest_float("gamma", 1e-8, 5.0, log=True),
-            "scale_pos_weight": scale_pos_weight,
-            "eval_metric": "logloss",
-            "random_state": RANDOM_STATE,
-            "n_jobs": -1,
-        }
-        model = xgb.XGBClassifier(**params)
-        model.fit(X_train, y_train)
-        y_prob = model.predict_proba(X_val)[:, 1]
-        return average_precision_score(y_val, y_prob)
-
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
-    print(f"[models] XGBoost best PR-AUC: {study.best_value:.4f} ({len(study.trials)} trials)")
-
-    best_params = study.best_params
-    best_params.update({"scale_pos_weight": scale_pos_weight, "eval_metric": "logloss",
-                        "random_state": RANDOM_STATE, "n_jobs": -1})
-    model = xgb.XGBClassifier(**best_params)
-    model.fit(X_train, y_train)
-    return model, best_params
-
-
-def _optuna_tune_catboost(X_train, y_train, X_val, y_val, n_trials: int = 50):
-    """Tune CatBoost with Optuna, optimizing PR-AUC on validation set."""
-    import optuna
-    from catboost import CatBoostClassifier
-    optuna.logging.set_verbosity(optuna.logging.WARNING)
-
-    def objective(trial):
-        params = {
-            "iterations": trial.suggest_int("iterations", 100, 600),
-            "depth": trial.suggest_int("depth", 3, 10),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-            "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1.0, 10.0),
-            "border_count": trial.suggest_int("border_count", 32, 255),
-            "auto_class_weights": "Balanced",
-            "random_seed": RANDOM_STATE,
-            "verbose": 0,
-        }
-        model = CatBoostClassifier(**params)
-        model.fit(X_train, y_train)
-        y_prob = model.predict_proba(X_val)[:, 1]
-        return average_precision_score(y_val, y_prob)
-
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
-    print(f"[models] CatBoost best PR-AUC: {study.best_value:.4f} ({len(study.trials)} trials)")
-
-    best_params = study.best_params
-    best_params.update({"auto_class_weights": "Balanced", "random_seed": RANDOM_STATE, "verbose": 0})
-    model = CatBoostClassifier(**best_params)
-    model.fit(X_train, y_train)
-    return model, best_params
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ENSEMBLE + CALIBRATION
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class SoftVotingEnsemble:
-    """Custom soft-voting ensemble for pre-trained models with isotonic calibration."""
-
-    def __init__(self, models: dict, weights: Optional[list] = None):
-        self.models = models  # {name: fitted_model}
-        n = len(models)
-        self.weights = weights or [1.0 / n] * n
-        self.calibrator = None
-
-    def predict_proba(self, X) -> np.ndarray:
-        """Weighted average of predicted probabilities."""
-        probs = np.zeros((X.shape[0], 2))
-        for (name, model), w in zip(self.models.items(), self.weights):
-            p = model.predict_proba(X)
-            probs += w * p
-        if self.calibrator is not None:
-            raw = probs[:, 1]
-            calibrated = self.calibrator.predict(raw.reshape(-1, 1))
-            return np.column_stack([1 - calibrated, calibrated])
-        return probs
-
-    def predict(self, X) -> np.ndarray:
-        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
-
-    def calibrate_isotonic(self, X_val, y_val):
-        """Fit isotonic calibration on validation set probabilities."""
-        from sklearn.isotonic import IsotonicRegression
-        raw_probs = np.zeros(X_val.shape[0])
-        for (name, model), w in zip(self.models.items(), self.weights):
-            raw_probs += w * model.predict_proba(X_val)[:, 1]
-        self.calibrator = IsotonicRegression(out_of_bounds="clip")
-        self.calibrator.fit(raw_probs, y_val)
-        print(f"[models] Isotonic calibration fitted on {len(y_val)} validation samples")
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # LACE SCORE BASELINE
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -386,131 +233,142 @@ def evaluate_lace_baseline(lace_scores: np.ndarray, y_true: np.ndarray) -> dict:
 # MAIN TRAINING + COMPARISON
 # ═══════════════════════════════════════════════════════════════════════════════
 
+class PlattCalibratedModel:
+    """Apply a validation-fitted sigmoid to a model's positive-class score."""
+    def __init__(self, base_model, name: str):
+        self.base_model = base_model
+        self.name = name
+        self.calibrator = LogisticRegression(C=1.0, solver="lbfgs", random_state=RANDOM_STATE)
+
+    def fit_calibration(self, X_val, y_val):
+        raw = self.base_model.predict_proba(X_val)[:, 1].reshape(-1, 1)
+        self.calibrator.fit(raw, y_val)
+        return self
+
+    def predict_proba(self, X):
+        raw = self.base_model.predict_proba(X)[:, 1].reshape(-1, 1)
+        return self.calibrator.predict_proba(raw)
+
+    def predict(self, X, threshold=0.5):
+        return (self.predict_proba(X)[:, 1] >= threshold).astype(int)
+
+    @property
+    def feature_importances_(self):
+        estimator = self.base_model.named_steps.get("classifier") if hasattr(self.base_model, "named_steps") else self.base_model
+        return getattr(estimator, "feature_importances_", None)
+
+
 def compare_models(
     X_train, y_train, X_val, y_val, X_test, y_test,
     n_optuna_trials: int = 50,
     threshold: Optional[float] = None,
+    groups_train=None,
 ) -> dict:
-    """Train all models, tune with Optuna, build ensemble, calibrate, evaluate.
-
-    Returns (results_dict, final_model, optimal_threshold, all_models)
-    """
+    """Tune three classifiers with patient-grouped CV and fold-local SMOTE."""
     timings = {}
+    templates = {
+        "LogisticRegression": LogisticRegression(max_iter=1500, random_state=RANDOM_STATE),
+        "RandomForest": RandomForestClassifier(random_state=RANDOM_STATE, n_jobs=1),
+        "XGBoost": xgb.XGBClassifier(
+            objective="binary:logistic", eval_metric="logloss", random_state=RANDOM_STATE,
+            n_jobs=1, tree_method="hist", scale_pos_weight=1.0,
+        ),
+    }
+    grids = {
+        "LogisticRegression": {"classifier__C": [0.1, 0.5, 1.0]},
+        "RandomForest": {
+            "classifier__n_estimators": [120, 200],
+            "classifier__max_depth": [8, 12],
+            "classifier__min_samples_leaf": [5],
+        },
+        "XGBoost": {
+            "classifier__n_estimators": [140, 220],
+            "classifier__max_depth": [3, 5],
+            "classifier__learning_rate": [0.03, 0.05],
+        },
+    }
+    if groups_train is None:
+        groups_train = np.arange(len(y_train))
+    groups_train = np.asarray(groups_train)
+    if len(groups_train) != len(y_train):
+        raise ValueError("groups_train must have one patient/group ID per training row")
+    cv = StratifiedGroupKFold(n_splits=3, shuffle=True, random_state=RANDOM_STATE)
     models = {}
-
-    # ── Baselines ─────────────────────────────────────────────────────────
-    print("\n[models] Training Logistic Regression (baseline)...")
-    t0 = time.time()
-    lr = train_logistic_regression(X_train, y_train)
-    timings["LogisticRegression"] = round(time.time() - t0, 2)
-    models["LogisticRegression"] = lr
-
-    print("[models] Training Random Forest (baseline)...")
-    t0 = time.time()
-    rf = train_random_forest(X_train, y_train)
-    timings["RandomForest"] = round(time.time() - t0, 2)
-    models["RandomForest"] = rf
-
-    # ── Optuna-tuned boosters ─────────────────────────────────────────────
-    print(f"\n[models] Optuna-tuning LightGBM ({n_optuna_trials} trials)...")
-    t0 = time.time()
-    lgbm_model, lgbm_params = _optuna_tune_lgbm(X_train, y_train, X_val, y_val, n_optuna_trials)
-    timings["LightGBM"] = round(time.time() - t0, 2)
-    models["LightGBM"] = lgbm_model
-
-    print(f"[models] Optuna-tuning XGBoost ({n_optuna_trials} trials)...")
-    t0 = time.time()
-    xgb_model, xgb_params = _optuna_tune_xgb(X_train, y_train, X_val, y_val, n_optuna_trials)
-    timings["XGBoost"] = round(time.time() - t0, 2)
-    models["XGBoost"] = xgb_model
-
-    print(f"[models] Optuna-tuning CatBoost ({n_optuna_trials} trials)...")
-    t0 = time.time()
-    cb_model, cb_params = _optuna_tune_catboost(X_train, y_train, X_val, y_val, n_optuna_trials)
-    timings["CatBoost"] = round(time.time() - t0, 2)
-    models["CatBoost"] = cb_model
-
-    # ── Soft-voting ensemble (top 3 boosters) ─────────────────────────────
-    print("\n[models] Building soft-voting ensemble (LightGBM + XGBoost + CatBoost)...")
-    ensemble = SoftVotingEnsemble(
-        {"LightGBM": lgbm_model, "XGBoost": xgb_model, "CatBoost": cb_model},
-        weights=[0.35, 0.35, 0.30],
-    )
-
-    # Isotonic calibration on validation set
-    ensemble.calibrate_isotonic(X_val, y_val)
-    models["CalibratedEnsemble"] = ensemble
-    timings["CalibratedEnsemble"] = round(timings["LightGBM"] + timings["XGBoost"] + timings["CatBoost"], 2)
-
-    # ── Threshold optimization on validation set ──────────────────────────
-    print("\n[models] Optimizing decision threshold on validation set...")
     val_probs = {}
-    for name, model in models.items():
-        val_probs[name] = model.predict_proba(X_val)[:, 1]
+    tuned_params = {}
+    cv_scores = {}
 
+    for name, template in templates.items():
+        print(f"\n[models] Tuning {name} with 3-fold grouped CV and fold-local SMOTE...")
+        started = time.time()
+        estimator = ImbalancedPipeline([
+            ("smote", SMOTE(sampling_strategy=1.0, k_neighbors=5, random_state=RANDOM_STATE)),
+            ("classifier", clone(template)),
+        ])
+        search = GridSearchCV(
+            estimator, grids[name], scoring="roc_auc", cv=cv, n_jobs=1,
+            refit=True, error_score="raise",
+        )
+        search.fit(X_train, y_train, groups=groups_train)
+        calibrated = PlattCalibratedModel(search.best_estimator_, name).fit_calibration(X_val, y_val)
+        models[name] = calibrated
+        val_probs[name] = calibrated.predict_proba(X_val)[:, 1]
+        tuned_params[name] = search.best_params_
+        cv_scores[name] = float(search.best_score_)
+        timings[name] = round(time.time() - started, 2)
+        print(f"[models] {name}: CV ROC-AUC={cv_scores[name]:.4f}; params={tuned_params[name]}")
+
+    validation_scores = {
+        name: {
+            "roc_auc": float(roc_auc_score(y_val, probs)),
+            "pr_auc": float(average_precision_score(y_val, probs)),
+            "brier_score": float(brier_score_loss(y_val, probs)),
+        }
+        for name, probs in val_probs.items()
+    }
+    selected_name = sorted(validation_scores, key=lambda name: (
+        -validation_scores[name]["roc_auc"], validation_scores[name]["brier_score"]
+    ))[0]
     if threshold is None:
-        threshold, rationale = optimize_threshold(y_val, val_probs["CalibratedEnsemble"], strategy="f1")
+        threshold, rationale = optimize_threshold(y_val, val_probs[selected_name], strategy="recall_target")
+        if not rationale:
+            threshold, rationale = optimize_threshold(y_val, val_probs[selected_name], strategy="f1")
     else:
         rationale = f"User-specified threshold: {threshold}"
-    print(f"[models] Selected threshold: {threshold:.3f} — {rationale}")
-
-    # ── Final evaluation on TEST SET (touched once) ───────────────────────
-    print("\n" + "=" * 60)
-    print("   FINAL EVALUATION ON HELD-OUT TEST SET")
-    print("=" * 60)
+    print(f"[models] Selected {selected_name} by validation ROC-AUC/Brier; threshold={threshold:.3f} ({rationale})")
 
     all_results = []
     test_probs = {}
     curves = {}
-
     for name, model in models.items():
         t_prob = model.predict_proba(X_test)[:, 1]
         test_probs[name] = t_prob
         metrics = compute_metrics(y_test, t_prob, threshold)
-        metrics["model"] = name
-        metrics["training_time_s"] = timings[name]
-
-        # Bootstrap CIs
-        ci = bootstrap_ci(y_test.values if hasattr(y_test, 'values') else y_test,
-                          t_prob, threshold, n_boot=1000)
-        metrics["bootstrap_ci"] = ci
-
-        # Curves for plotting
+        metrics.update({"model": name, "training_time_s": timings[name], "cv_roc_auc": cv_scores[name]})
+        metrics["bootstrap_ci"] = bootstrap_ci(
+            y_test.values if hasattr(y_test, "values") else y_test,
+            t_prob, threshold, n_boot=1000,
+        )
         fpr, tpr, _ = roc_curve(y_test, t_prob)
         pr_prec, pr_rec, _ = precision_recall_curve(y_test, t_prob)
         prob_true, prob_pred = calibration_curve(y_test, t_prob, n_bins=10, strategy="uniform")
-
         curves[name] = {
-            "fpr": fpr.tolist(),
-            "tpr": tpr.tolist(),
-            "pr_precision": pr_prec.tolist(),
-            "pr_recall": pr_rec.tolist(),
-            "calib_true": prob_true.tolist(),
-            "calib_pred": prob_pred.tolist(),
+            "fpr": fpr.tolist(), "tpr": tpr.tolist(),
+            "pr_precision": pr_prec.tolist(), "pr_recall": pr_rec.tolist(),
+            "calib_true": prob_true.tolist(), "calib_pred": prob_pred.tolist(),
         }
-
         all_results.append(metrics)
-        print(f"  {name:25s} | AUROC={metrics['auroc']:.4f} | PR-AUC={metrics['pr_auc']:.4f} "
-              f"| P={metrics['precision']:.3f} | R={metrics['recall']:.3f} | F1={metrics['f1']:.3f} "
-              f"| Brier={metrics['brier_score']:.4f}")
+        print(f"  {name:20s} | AUROC={metrics['auroc']:.4f} | PR-AUC={metrics['pr_auc']:.4f} "
+              f"| Acc={metrics['accuracy']:.3f} | P={metrics['precision']:.3f} | R={metrics['recall']:.3f} | F1={metrics['f1']:.3f}")
 
-    # ── Save tuned hyperparameters ────────────────────────────────────────
-    tuned_params = {
-        "lightgbm": lgbm_params,
-        "xgboost": xgb_params,
-        "catboost": cb_params,
+    comparison = {
+        "results": all_results, "test_probs": test_probs, "curves": curves,
+        "timings": timings, "tuned_params": tuned_params, "cv_scores": cv_scores,
+        "validation_scores": validation_scores, "threshold": float(threshold),
+        "threshold_rationale": rationale, "selected_model": selected_name,
+        "smote": {"sampling_strategy": 1.0, "k_neighbors": 5, "scope": "training fold only"},
     }
-
-    return {
-        "results": all_results,
-        "test_probs": test_probs,
-        "curves": curves,
-        "timings": timings,
-        "tuned_params": tuned_params,
-        "threshold": threshold,
-        "threshold_rationale": rationale,
-        "selected_model": "CalibratedEnsemble",
-    }, ensemble, threshold, models
+    return comparison, models[selected_name], threshold, models
 
 
 def probability_to_tier(prob: float) -> str:
@@ -522,13 +380,13 @@ def probability_to_tier(prob: float) -> str:
 
 
 def get_feature_importance(model, feature_names: list[str], top_n: int = 15) -> list[dict]:
-    """Extract feature importances from tree-based model."""
+    """Extract tree importances or absolute logistic-regression coefficients."""
     try:
         m = model
-        # Unwrap ensemble
-        if isinstance(m, SoftVotingEnsemble):
-            # Use first model's importances
-            m = list(m.models.values())[0]
+        if hasattr(m, "base_model"):
+            m = m.base_model
+        if hasattr(m, "named_steps"):
+            m = m.named_steps.get("classifier", m)
         if hasattr(m, "estimator"):
             m = getattr(m.estimator, "estimator", m.estimator)
         elif hasattr(m, "calibrated_classifiers_") and len(m.calibrated_classifiers_) > 0:
@@ -536,6 +394,8 @@ def get_feature_importance(model, feature_names: list[str], top_n: int = 15) -> 
 
         if hasattr(m, "feature_importances_"):
             importances = m.feature_importances_
+        elif hasattr(m, "coef_"):
+            importances = np.abs(m.coef_).mean(axis=0)
         elif hasattr(m, "estimators_") and hasattr(m.estimators_[0], "feature_importances_"):
             importances = m.estimators_[0].feature_importances_
         else:
@@ -565,7 +425,7 @@ def save_artifacts(
 
     artifact_meta = {
         "model_version": "2.0.0",
-        "model_type": "Soft-Voting Ensemble (LightGBM+XGBoost+CatBoost, isotonic calibrated)",
+        "model_type": f"{comparison_results.get('selected_model', getattr(final_model, 'name', 'selected classifier'))} (Platt calibrated)",
         "threshold": threshold,
         "risk_tiers": RISK_TIERS,
         "feature_names": feature_names,

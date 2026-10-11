@@ -27,6 +27,7 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler, OrdinalEncoder
 from sklearn.feature_selection import SelectFromModel
 from sklearn.ensemble import RandomForestClassifier
@@ -337,15 +338,21 @@ def build_preprocessor(X_train: pd.DataFrame):
 
     transformers = []
     if num_cols:
-        transformers.append(("num", StandardScaler(), num_cols))
+        transformers.append(("num", Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ]), num_cols))
     if cat_cols:
         transformers.append((
             "cat",
-            OneHotEncoder(handle_unknown="ignore", sparse_output=False),
+            Pipeline([
+                ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
+                ("encoder", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+            ]),
             cat_cols,
         ))
     if bin_cols:
-        transformers.append(("bin", "passthrough", bin_cols))
+        transformers.append(("bin", SimpleImputer(strategy="constant", fill_value=0), bin_cols))
 
     preprocessor = ColumnTransformer(transformers=transformers, remainder="drop")
     return preprocessor
@@ -366,17 +373,15 @@ def prepare_features(df: pd.DataFrame, caps: Optional[dict] = None) -> tuple[pd.
 
     X = df[ALL_MODEL_FEATURES].copy()
 
-    # Fill missing in binary/numerical
+    # Normalize numeric fields but leave missing values for train-only imputers.
     for col in NUMERICAL_FEATURES + BINARY_FEATURES:
         if col in X.columns:
-            X[col] = pd.to_numeric(X[col], errors="coerce").fillna(
-                X[col].median() if col in NUMERICAL_FEATURES else 0
-            )
+            X[col] = pd.to_numeric(X[col], errors="coerce")
 
-    # Fill missing in categoricals
+    # Preserve missing categorical values for the fitted train-only imputer.
     for col in CATEGORICAL_FEATURES:
         if col in X.columns:
-            X[col] = X[col].fillna("Unknown").astype(str)
+            X[col] = X[col].where(X[col].notna(), np.nan).astype(object)
 
     return X, caps
 
@@ -388,7 +393,7 @@ def compute_lace_score_baseline(df: pd.DataFrame) -> np.ndarray:
 
 
 def run_full_pipeline(df: pd.DataFrame):
-    """Full offline pipeline: filter → target → split → preprocess → SMOTE → return splits.
+    """Full offline pipeline: filter → target → grouped split → preprocess → return splits.
 
     Split is 70/10/20 (train/val/test) using patient-grouped splitting.
     Validation set is used for threshold tuning and calibration.
@@ -402,26 +407,27 @@ def run_full_pipeline(df: pd.DataFrame):
     # Log high-missing columns
     drop_high_missing_cols(df)
 
-    X, caps = prepare_features(df)
-
     # ── Patient-grouped 80/20 split (train+val / test) ────────────────────
     gss1 = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=RANDOM_STATE)
-    trainval_idx, test_idx = next(gss1.split(X, y, groups=groups))
+    trainval_idx, test_idx = next(gss1.split(df, y, groups=groups))
 
     # ── Further split train+val → train (70%) / val (10%) ─────────────────
-    X_trainval = X.iloc[trainval_idx]
+    df_trainval = df.iloc[trainval_idx]
     y_trainval = y.iloc[trainval_idx]
     groups_trainval = groups[trainval_idx]
 
     gss2 = GroupShuffleSplit(n_splits=1, test_size=0.125, random_state=RANDOM_STATE)  # 0.125 × 0.80 ≈ 0.10
-    train_rel_idx, val_rel_idx = next(gss2.split(X_trainval, y_trainval, groups=groups_trainval))
+    train_rel_idx, val_rel_idx = next(gss2.split(df_trainval, y_trainval, groups=groups_trainval))
 
     train_idx = trainval_idx[train_rel_idx]
     val_idx = trainval_idx[val_rel_idx]
 
-    X_train_raw = X.iloc[train_idx].reset_index(drop=True)
-    X_val_raw = X.iloc[val_idx].reset_index(drop=True)
-    X_test_raw = X.iloc[test_idx].reset_index(drop=True)
+    df_train_raw = df.iloc[train_idx].reset_index(drop=True)
+    df_val_raw = df.iloc[val_idx].reset_index(drop=True)
+    df_test_raw = df.iloc[test_idx].reset_index(drop=True)
+    X_train_raw, caps = prepare_features(df_train_raw)
+    X_val_raw, _ = prepare_features(df_val_raw, caps=caps)
+    X_test_raw, _ = prepare_features(df_test_raw, caps=caps)
     y_train = y.iloc[train_idx].reset_index(drop=True)
     y_val = y.iloc[val_idx].reset_index(drop=True)
     y_test = y.iloc[test_idx].reset_index(drop=True)
@@ -442,11 +448,6 @@ def run_full_pipeline(df: pd.DataFrame):
     X_val = preprocessor.transform(X_val_raw)
     X_test = preprocessor.transform(X_test_raw)
 
-    # ── SMOTE on training data only ───────────────────────────────────────
-    smote = SMOTE(random_state=RANDOM_STATE)
-    X_train_sm, y_train_sm = smote.fit_resample(X_train, y_train)
-    print(f"[preprocessing] After SMOTE: {y_train_sm.sum():,} positives / {(~y_train_sm.astype(bool)).sum():,} negatives")
-
     # ── Data quality report ───────────────────────────────────────────────
     quality_report = {
         "total_raw": int(raw_total),
@@ -457,7 +458,9 @@ def run_full_pipeline(df: pd.DataFrame):
         "positive_rate_train": float(y_train.mean()),
         "positive_rate_val": float(y_val.mean()),
         "positive_rate_test": float(y_test.mean()),
-        "after_smote_train_size": int(len(X_train_sm)),
+        "after_smote_train_size": None,  # SMOTE is applied within each training CV fold.
+        "smote_fold_target_size": "minority class is synthetically oversampled to match majority class",
+        "smote_scope": "training folds only; validation and test are not resampled",
         "outlier_caps": caps,
         "n_features_raw": int(len(ALL_MODEL_FEATURES)),
         "n_features_encoded": int(X_train.shape[1]),
@@ -471,8 +474,8 @@ def run_full_pipeline(df: pd.DataFrame):
     df_val = df.iloc[val_idx].reset_index(drop=True)
 
     return {
-        "X_train": X_train_sm,
-        "y_train": y_train_sm,
+        "X_train": X_train,
+        "y_train": y_train,
         "X_val": X_val,
         "y_val": y_val,
         "X_test": X_test,
@@ -482,6 +485,7 @@ def run_full_pipeline(df: pd.DataFrame):
         "X_test_raw": X_test_raw,
         "X_train_no_smote": X_train,
         "y_train_no_smote": y_train,
+        "groups_train": pd.Series(groups[train_idx]).reset_index(drop=True),
         "preprocessor": preprocessor,
         "caps": caps,
         "quality_report": quality_report,

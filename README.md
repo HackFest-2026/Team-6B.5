@@ -12,7 +12,7 @@
 2. **Discharge-Planning Worklist (`/worklist`)**: Search, filter, sort, and paginate inpatient encounters. Includes risk tier badges, calibrated probability, priority indicators, and an interactive side-drawer showing feature attributions and immediate care transitions.
 3. **Explainable Risk Calculator (`/calculator`)**: Bedside risk simulator allowing clinicians to adjust modifiable clinical inputs (length of stay, insulin dosage, medication counts, glucose/HbA1c tests) to compute live probabilities with model version provenance and SHAP-based feature attributions.
 4. **Follow-Up and Care-Plan Tracker (`/careplans`)**: Dedicated transitional care coordinator view tracking multidisciplinary tasks (medication reconciliation, follow-up scheduling within 7 days, telehealth outreach in 48–72h, diabetes education). Supports real-time task toggles, assignee management, and completion timestamps persisted in the database.
-5. **Model Comparison and Evaluation (`/models`)**: Leakage-free benchmark comparing **Logistic Regression**, **Random Forest**, and **Calibrated XGBoost (Isotonic)** on the same patient-grouped holdout partition. Displays ROC-AUC, PR-AUC, Recall/Sensitivity, Precision, Accuracy, Brier score, calibration analysis, and confusion matrices.
+5. **Model Comparison and Evaluation (`/models`)**: Benchmark comparing **Logistic Regression**, **Random Forest**, and **XGBoost** on the same patient-grouped holdout partition. Displays ROC-AUC, PR-AUC, Recall/Sensitivity, Precision, Accuracy, Brier score, calibration analysis, and confusion matrices.
 6. **Fairness and Governance Dashboard (`/fairness`)**: Subgroup audit across protected attributes (**Age Group**, **Gender**, and **Race**). Reports TPR, FPR, selection rate, demographic parity differences, and evaluates Fairlearn's `ThresholdOptimizer` mitigation benchmark.
 7. **Data Ingestion & Quality Audit (`/datasets`)**: Backend-enforced CSV upload validation pipeline. Inspects required clinical schema fields, flags statistical outliers (>30-day stay, >80 medications), audits missingness, presents a human-readable quality report, and requires explicit user confirmation before database ingestion.
 8. **AI Model Card & System Provenance (`/provenance`)**: Standardized AI Model Card detailing intended use boundaries, target population, training cohort description, leakage safeguards, and known limitations. Includes an immutable compliance audit trail logging administrative events.
@@ -25,7 +25,7 @@
 graph TD
     Client["React 18 + Vite Frontend<br/>(Light Clinical Healthcare Theme, Recharts, Lucide)"]
     FastAPI["FastAPI REST Backend<br/>(Async REST API, Pydantic v2)"]
-    Inference["Inference Engine<br/>(Calibrated XGBoost, SHAP TreeExplainer)"]
+    Inference["Inference Engine<br/>(Validation-selected calibrated classifier)"]
     DB[("PostgreSQL / Supabase<br/>(Local SQLite data/demo.db fallback)")]
 
     Client -->|HTTP / JSON via /api| FastAPI
@@ -45,25 +45,27 @@ graph TD
 ### 1. Dataset & Preprocessing
 Derived from the **UCI Diabetes 130-US Hospitals dataset** (101,766 inpatient encounters, 1999–2008):
 - **Cohort Eligibility**: Excluded terminal discharges (`discharge_disposition_id` in `{11, 13, 14, 19, 20, 21}` corresponding to expired patients and hospice transfers).
-- **Patient Leakage Prevention**: Split using `GroupShuffleSplit` on `patient_nbr` (80/20 train/test split). Encounters from the same patient never appear in both train and test partitions.
-- **Missing Value Handling**: Missing indicators (`'?'`, `'Unknown/Invalid'`) preserved as sentinel categories for categoricals; median imputation for numerical features.
+- **Patient Leakage Prevention**: Patient-grouped `GroupShuffleSplit` partitions data into 70% train, 10% validation, and 20% test. Encounters from the same patient never appear in different partitions.
+- **Missing Value Handling**: Missing indicators (`'?'`, `'Unknown/Invalid'`) are normalized; median imputation for numeric features and most-frequent imputation for categorical features are fitted on training data only.
 - **Clinical ICD-9 Categorization**: Grouped diagnosis codes (`diag_1`, `diag_2`, `diag_3`) into 17 high-level clinical categories (Circulatory, Respiratory, Endocrine/Metabolic, Genitourinary, Digestive, Neoplasms, etc.).
 - **Outlier Capping**: IQR-based capping fit exclusively on training data for continuous clinical variables (`time_in_hospital`, `num_lab_procedures`, `num_medications`, `number_diagnoses`).
-- **Class Imbalance**: SMOTE applied strictly to the training fold after splitting. The test set preserves the natural 9.0% readmission prevalence.
+- **Feature Scaling**: Numeric features are standardized using training-only statistics; categorical features are one-hot encoded.
+- **Class Imbalance**: SMOTE balances each model's training fold to a 1:1 class ratio inside grouped cross-validation. Validation and test sets retain their natural class prevalence.
 
 ### 2. Model Comparison
 
-Three model families evaluated on the identical holdout split:
+Three model families are tuned with cloned estimators and 3-fold `StratifiedGroupKFold`; model selection uses validation ROC-AUC with Brier score as a tie-breaker. The reported operating metrics use a validation-selected threshold of 0.105 that targets at least 40% recall. The held-out test set has 9.0% positive prevalence.
 
-| Model | ROC-AUC | Recall | Precision | Accuracy | Brier Score | Clinical Role |
-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Logistic Regression** | 0.620 | 0.952 | 0.096 | 0.187 | 0.2319 | Linear baseline, sensitive screening |
-| **Random Forest** | 0.608 | 0.910 | 0.100 | 0.250 | 0.1759 | Non-linear tree ensemble |
-| **XGBoost (Calibrated)** | **0.635** | 0.057 | **0.333** | **0.905** | **0.0806** | **Selected**: Gradient boosting with isotonic calibration |
+| Model | ROC-AUC | PR-AUC | Recall | Precision | F1 | Accuracy | Brier Score |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Logistic Regression (selected)** | 0.6211 | 0.1561 | 0.4152 | 0.1423 | 0.2120 | 0.7217 | 0.0804 |
+| **Random Forest** | 0.6136 | 0.1400 | 0.3780 | 0.1370 | 0.2011 | 0.7292 | 0.0808 |
+| **XGBoost** | **0.6246** | 0.1548 | 0.3455 | **0.1527** | 0.2118 | **0.7681** | 0.0805 |
 
 ### 3. Calibration & Threshold Rationale
-- **Calibration**: XGBoost probabilities are calibrated using `CalibratedClassifierCV` with isotonic regression, producing well-calibrated posterior probabilities with a minimized Brier score (0.0806).
-- **Threshold Selection**: An operational decision threshold of **0.15 (15%)** fits a screening workflow (base readmission prevalence ~9%).
+- **Calibration**: Each tuned model receives a Platt sigmoid fitted on validation predictions; the test partition is used only for final evaluation.
+- **Threshold Selection**: The current operating threshold is **0.105**, selected on validation data to maximize precision while maintaining recall of at least 40%.
+- **Model Selection**: Logistic Regression was selected by validation ROC-AUC/Brier score. Accuracy at the chosen recall-oriented threshold is below 90%; the 9% event prevalence makes accuracy alone misleading, so precision, recall, PR-AUC, ROC-AUC, and calibration are reported with it.
 - **Risk Tiers**:
   - **Low Risk**: `< 12%` (at or below general population base rate)
   - **Elevated Risk**: `12% – 20%` (1.5× – 2.5× average baseline risk)
@@ -73,7 +75,7 @@ Three model families evaluated on the identical holdout split:
 
 ## 🔍 Explainability & Decision Support
 
-- **SHAP Feature Attributions**: Deterministic attributions computed via `shap.TreeExplainer` on the underlying tree ensemble, ranking local factors that push risk upward or downward.
+- **Feature Attributions**: Tree models use SHAP TreeExplainer when available; Logistic Regression uses coefficient-based global importance. Explanations describe associations, not causal effects.
 - **Modifiable vs. Fixed Taxonomy**:
   - *Modifiable Factors* (intervention targets): medication counts, regimen changes, glucose monitoring, HbA1c testing, discharge destination.
   - *Fixed Historical Factors* (risk context): age, prior emergency/inpatient visits, primary admission diagnosis.
