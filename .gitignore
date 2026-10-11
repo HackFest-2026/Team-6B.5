@@ -44,3 +44,5 @@ data/*.sqlite3
 data/*.csv
 data/**/*.csv
 
+catboost_info/
+

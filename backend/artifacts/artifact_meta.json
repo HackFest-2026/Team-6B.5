@@ -1,7 +1,7 @@
 {
-  "model_version": "1.0.0",
-  "model_type": "XGBoost (calibrated, isotonic)",
-  "threshold": 0.15,
+  "model_version": "2.0.0",
+  "model_type": "Soft-Voting Ensemble (LightGBM+XGBoost+CatBoost, isotonic calibrated)",
+  "threshold": 0.12,
   "risk_tiers": {
     "low": [
       0.0,
@@ -25,11 +25,23 @@
     "number_diagnoses",
     "num_active_meds",
     "prior_visits",
+    "number_outpatient",
+    "number_emergency",
+    "number_inpatient",
+    "lace_score",
+    "a1c_ordinal",
+    "glu_ordinal",
+    "los_x_ndiag",
+    "age_x_nmeds",
+    "ed_x_inpatient",
+    "insulin_x_a1c",
     "diag_1_cat_Blood",
     "diag_1_cat_Circulatory",
     "diag_1_cat_Congenital",
+    "diag_1_cat_Diabetes",
     "diag_1_cat_Digestive",
     "diag_1_cat_Endocrine/Metabolic",
+    "diag_1_cat_Endocrine/Thyroid",
     "diag_1_cat_External/Supplemental",
     "diag_1_cat_Genitourinary",
     "diag_1_cat_Infectious",
@@ -46,8 +58,10 @@
     "diag_2_cat_Blood",
     "diag_2_cat_Circulatory",
     "diag_2_cat_Congenital",
+    "diag_2_cat_Diabetes",
     "diag_2_cat_Digestive",
     "diag_2_cat_Endocrine/Metabolic",
+    "diag_2_cat_Endocrine/Thyroid",
     "diag_2_cat_External/Supplemental",
     "diag_2_cat_Genitourinary",
     "diag_2_cat_Infectious",
@@ -64,8 +78,10 @@
     "diag_3_cat_Blood",
     "diag_3_cat_Circulatory",
     "diag_3_cat_Congenital",
+    "diag_3_cat_Diabetes",
     "diag_3_cat_Digestive",
     "diag_3_cat_Endocrine/Metabolic",
+    "diag_3_cat_Endocrine/Thyroid",
     "diag_3_cat_External/Supplemental",
     "diag_3_cat_Genitourinary",
     "diag_3_cat_Infectious",
@@ -119,8 +135,6 @@
     "discharge_disposition_id_9",
     "admission_source_id_1",
     "admission_source_id_10",
-    "admission_source_id_11",
-    "admission_source_id_13",
     "admission_source_id_14",
     "admission_source_id_17",
     "admission_source_id_2",
@@ -145,7 +159,8 @@
     "any_med_change",
     "a1c_tested",
     "primary_diab",
-    "diabetesMed"
+    "diabetesMed",
+    "lace_high"
   ],
   "caps": {
     "age_mid": [
@@ -179,6 +194,46 @@
     "prior_visits": [
       -1.5,
       2.5
+    ],
+    "number_outpatient": [
+      0.0,
+      0.0
+    ],
+    "number_emergency": [
+      0.0,
+      0.0
+    ],
+    "number_inpatient": [
+      0.0,
+      0.0
+    ],
+    "lace_score": [
+      -0.6666666666666652,
+      18.0
+    ],
+    "a1c_ordinal": [
+      0.0,
+      0.0
+    ],
+    "glu_ordinal": [
+      0.0,
+      0.0
+    ],
+    "los_x_ndiag": [
+      -37.5,
+      94.5
+    ],
+    "age_x_nmeds": [
+      -150.0,
+      330.0
+    ],
+    "ed_x_inpatient": [
+      0.0,
+      0.0
+    ],
+    "insulin_x_a1c": [
+      0.0,
+      0.0
     ]
   }
 }

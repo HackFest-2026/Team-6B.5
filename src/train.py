@@ -1,21 +1,24 @@
 """
 train.py
 ========
-End-to-end training script. Run once to produce all model artifacts.
+End-to-end training orchestrator. Run once to produce all model artifacts.
 
 Usage
 -----
     python src/train.py
 
-The script will:
-1. Download the UCI Diabetes dataset (via ucimlrepo) if not already present.
-2. Apply preprocessing, patient-grouped splits, SMOTE.
-3. Train Logistic Regression, Random Forest, and XGBoost.
-4. Compare models on the test split.
-5. Calibrate the best model.
-6. Run fairness audit.
-7. Save all artifacts to backend/artifacts/.
-8. Seed the database with demo encounters (if DATABASE_URL is set).
+Pipeline
+--------
+1. Download / verify the UCI Diabetes 130-US Hospitals dataset.
+2. Apply preprocessing, patient-grouped 70/10/20 split, SMOTE.
+3. Optuna-tune LightGBM, XGBoost, CatBoost (50 trials each, PR-AUC).
+4. Build calibrated soft-voting ensemble.
+5. Optimize threshold on validation set.
+6. Final evaluation on held-out test set with bootstrap CIs.
+7. LACE score baseline comparison.
+8. Fairness audit.
+9. Save all artifacts to backend/artifacts/.
+10. Seed the database with demo encounters.
 """
 
 from __future__ import annotations
@@ -42,8 +45,17 @@ from src.preprocessing import (
     CATEGORICAL_FEATURES,
     load_raw_data,
     run_full_pipeline,
+    compute_lace_score_baseline,
+    engineer_features,
 )
-from src.models import compare_models, save_artifacts, get_feature_importance, probability_to_tier
+from src.models import (
+    compare_models,
+    save_artifacts,
+    get_feature_importance,
+    probability_to_tier,
+    evaluate_lace_baseline,
+    bootstrap_ci,
+)
 from src.fairness import audit_fairness, run_threshold_optimizer_comparison, age_to_group
 
 
@@ -73,7 +85,6 @@ def download_dataset():
                 zf = zipfile.ZipFile(io.BytesIO(resp.read()))
                 DATA_DIR.mkdir(parents=True, exist_ok=True)
                 zf.extractall(DATA_DIR)
-                # Move if nested
                 for f in DATA_DIR.rglob("diabetic_data.csv"):
                     if f != csv_path:
                         import shutil
@@ -100,23 +111,23 @@ def _create_synthetic_dataset(csv_path: Path):
         n, p=[0.76, 0.19, 0.02, 0.01, 0.02]
     )
     gender = rng.choice(["Male", "Female"], n, p=[0.46, 0.54])
-    
+
     time_in = rng.integers(1, 15, n)
     num_lab = rng.integers(1, 120, n)
     num_meds = rng.integers(1, 80, n)
     num_diag = rng.integers(1, 9, n)
     num_proc = rng.integers(0, 7, n)
-    
+
     readmitted_prob = (
         0.08
-        + 0.10 * (rng.random(n) < 0.3)  # prior inpatient
+        + 0.10 * (rng.random(n) < 0.3)
         + 0.05 * (num_meds > 15) / 1
         + 0.05 * (num_diag > 5) / 1
         + 0.03 * (time_in > 7) / 1
     )
     readmitted_prob = np.clip(readmitted_prob, 0, 0.35)
     readmitted_val = rng.random(n) < readmitted_prob
-    readmitted_label = np.where(readmitted_val, "<30", 
+    readmitted_label = np.where(readmitted_val, "<30",
                                 np.where(rng.random(n) < 0.5, ">30", "NO"))
 
     df = pd.DataFrame({
@@ -171,7 +182,6 @@ def _create_synthetic_dataset(csv_path: Path):
         "diabetesMed": rng.choice(["Yes", "No"], n, p=[0.78, 0.22]),
         "readmitted": readmitted_label,
     })
-    # Remove terminal discharge IDs from synthetic data
     df.loc[df["discharge_disposition_id"].isin({11, 13, 14, 19, 20, 21}), "discharge_disposition_id"] = 1
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -182,9 +192,13 @@ def _create_synthetic_dataset(csv_path: Path):
 def seed_db_encounters(df_test: pd.DataFrame, probs: np.ndarray, threshold: float):
     """Write demo encounters to DB (PostgreSQL if DATABASE_URL is set, else SQLite demo.db)."""
     import asyncio
-    from backend.app.database import engine, init_db, AsyncSessionLocal
-    from backend.app.models_db import DemoEncounter, CarePlan, CarePlanAction
-    from sqlalchemy import select, delete
+    try:
+        from backend.app.database import engine, init_db, AsyncSessionLocal
+        from backend.app.models_db import DemoEncounter, CarePlan, CarePlanAction
+        from sqlalchemy import select, delete
+    except ImportError:
+        print("[train] DB modules not available, skipping seed.")
+        return
 
     async def _async_seed():
         await init_db()
@@ -224,7 +238,7 @@ def seed_db_encounters(df_test: pd.DataFrame, probs: np.ndarray, threshold: floa
                     diabetes_med=str(row.get("diabetesMed", row.get("diabetes_med", "Yes"))),
                     readmission_prob=round(prob, 4),
                     risk_tier=tier,
-                    model_version="1.0.0",
+                    model_version="2.0.0",
                 )
                 session.add(enc)
 
@@ -271,6 +285,7 @@ def seed_db_encounters(df_test: pd.DataFrame, probs: np.ndarray, threshold: floa
 
 
 def run_training():
+    """Main training entry point."""
     download_dataset()
 
     df = load_raw_data()
@@ -280,9 +295,12 @@ def run_training():
 
     print(f"[train] Raw data shape: {df.shape}")
 
+    # ── Pipeline ──────────────────────────────────────────────────────────
     pipeline_outputs = run_full_pipeline(df)
     X_train = pipeline_outputs["X_train"]
     y_train = pipeline_outputs["y_train"]
+    X_val = pipeline_outputs["X_val"]
+    y_val = pipeline_outputs["y_val"]
     X_test = pipeline_outputs["X_test"]
     y_test = pipeline_outputs["y_test"]
     X_train_raw = pipeline_outputs["X_train_raw"]
@@ -291,12 +309,15 @@ def run_training():
     quality_report = pipeline_outputs["quality_report"]
     df_test = pipeline_outputs["df_test"]
 
-    print(f"\n[train] X_train: {X_train.shape}, X_test: {X_test.shape}")
+    print(f"\n[train] X_train: {X_train.shape} | X_val: {X_val.shape} | X_test: {X_test.shape}")
 
-    # ── model comparison ─────────────────────────────────────────────────
-    metrics, calib_model, threshold = compare_models(X_train, y_train, X_test, y_test)
+    # ── Model comparison + Optuna tuning ──────────────────────────────────
+    comparison, final_model, threshold, all_models = compare_models(
+        X_train, y_train, X_val, y_val, X_test, y_test,
+        n_optuna_trials=50,
+    )
 
-    # ── feature names after preprocessing ───────────────────────────────
+    # ── Feature names after preprocessing ─────────────────────────────────
     feature_names = []
     for name, trans, cols in preprocessor.transformers_:
         if name == "cat" and hasattr(trans, "get_feature_names_out"):
@@ -304,15 +325,23 @@ def run_training():
         elif name in ("num", "bin"):
             feature_names.extend(cols)
 
-    # ── fairness audit ───────────────────────────────────────────────────
-    print("\n[train] Running fairness audit...")
-    from src.preprocessing import engineer_features
+    # ── LACE score baseline comparison ────────────────────────────────────
+    print("\n[train] Evaluating LACE score baseline...")
+    lace_scores = compute_lace_score_baseline(df_test)
+    lace_result = evaluate_lace_baseline(lace_scores, y_test.values)
+    comparison["lace_baseline"] = lace_result
+    print(f"[train] LACE baseline: AUROC={lace_result['auroc']:.4f} | F1={lace_result['f1']:.4f}")
+    print(f"[train] ML ensemble improvement over LACE:")
+    ens_metrics = [r for r in comparison["results"] if r["model"] == "CalibratedEnsemble"][0]
+    print(f"  AUROC: {ens_metrics['auroc']:.4f} vs {lace_result['auroc']:.4f} "
+          f"(+{ens_metrics['auroc'] - lace_result['auroc']:.4f})")
 
+    # ── Fairness audit ────────────────────────────────────────────────────
+    print("\n[train] Running fairness audit...")
     df_test_eng = engineer_features(df_test)
     df_test_eng["age_group"] = df_test_eng["age_mid"].apply(age_to_group)
-
     sensitive_df = df_test_eng[["age_group", "gender", "race"]].reset_index(drop=True)
-    probs_test = calib_model.predict_proba(X_test)[:, 1]
+    probs_test = final_model.predict_proba(X_test)[:, 1]
 
     fairness_results = audit_fairness(
         y_true=y_test.values,
@@ -322,38 +351,45 @@ def run_training():
     )
 
     mitigation_comparison = run_threshold_optimizer_comparison(
-        X_train, y_train, X_test, y_test, sensitive_df["race"], calib_model
+        X_train, y_train, X_test, y_test, sensitive_df["race"], final_model
     )
 
-    # ── feature importances ──────────────────────────────────────────────
-    importances = get_feature_importance(calib_model, feature_names)
+    # ── Feature importances ──────────────────────────────────────────────
+    importances = get_feature_importance(final_model, feature_names)
 
-    # ── governance report ────────────────────────────────────────────────
+    # ── Governance report ────────────────────────────────────────────────
     governance_report = {
-        "model_comparison": metrics,
+        "model_comparison": comparison,
         "fairness": fairness_results,
         "mitigation_comparison": mitigation_comparison,
         "feature_importances": importances,
         "data_quality": quality_report,
         "feature_names": feature_names,
+        "lace_baseline": lace_result,
     }
 
     with open(ARTIFACTS_DIR / "governance_report.json", "w") as f:
         json.dump(governance_report, f, indent=2, default=str)
     print(f"[train] Governance report saved.")
 
-    # ── save all artifacts ───────────────────────────────────────────────
-    save_artifacts(calib_model, preprocessor, caps, metrics, feature_names, threshold)
+    # ── Save all artifacts ───────────────────────────────────────────────
+    save_artifacts(final_model, preprocessor, caps, comparison, feature_names, threshold, all_models)
 
-    # ── seed DB ─────────────────────────────────────────────────────────
+    # ── Seed DB ─────────────────────────────────────────────────────────
     seed_db_encounters(df_test, probs_test, threshold)
 
-    print("\n[train] [SUCCESS] Training complete!")
-    print(f"  Selected model : XGBoost (calibrated)")
-    print(f"  Threshold      : {threshold:.2f}")
-    print(f"  Test AUC       : {metrics['xgboost_calibrated']['roc_auc']:.3f}")
-    print(f"  Test Recall    : {metrics['xgboost_calibrated']['recall']:.3f}")
-    print(f"  Test Precision : {metrics['xgboost_calibrated']['precision']:.3f}")
+    # ── Summary ──────────────────────────────────────────────────────────
+    print("\n" + "=" * 60)
+    print("   TRAINING COMPLETE")
+    print("=" * 60)
+    print(f"  Selected model : Calibrated Ensemble (LightGBM+XGBoost+CatBoost)")
+    print(f"  Threshold      : {threshold:.3f}")
+    print(f"  Test AUROC     : {ens_metrics['auroc']:.4f}")
+    print(f"  Test PR-AUC    : {ens_metrics['pr_auc']:.4f}")
+    print(f"  Test Recall    : {ens_metrics['recall']:.3f}")
+    print(f"  Test Precision : {ens_metrics['precision']:.3f}")
+    print(f"  Test F1        : {ens_metrics['f1']:.3f}")
+    print(f"  LACE baseline  : AUROC={lace_result['auroc']:.4f}")
     print(f"  Artifacts      : {ARTIFACTS_DIR}")
 
 
