@@ -92,7 +92,13 @@ def explain_instance(
             import shap
             # Unwrap model for tree explainer
             tree_model = model
-            if hasattr(tree_model, "estimator"):
+            if hasattr(tree_model, "models"):
+                tree_model = (
+                    tree_model.models.get("LightGBM")
+                    or tree_model.models.get("XGBoost")
+                    or list(tree_model.models.values())[0]
+                )
+            elif hasattr(tree_model, "estimator"):
                 tree_model = getattr(tree_model.estimator, "estimator", tree_model.estimator)
             elif hasattr(tree_model, "calibrated_classifiers_") and len(tree_model.calibrated_classifiers_) > 0:
                 tree_model = getattr(tree_model.calibrated_classifiers_[0], "estimator", tree_model)
@@ -102,7 +108,7 @@ def explain_instance(
                 explainer = shap.TreeExplainer(tree_model)
                 shap_values = explainer.shap_values(X_instance)
                 if isinstance(shap_values, list):
-                    vals = shap_values[1][0]  # positive class
+                    vals = shap_values[1][0] if len(shap_values) > 1 else shap_values[0][0]  # positive class
                 elif hasattr(shap_values, "shape") and len(shap_values.shape) > 1 and shap_values.shape[0] == 1:
                     vals = shap_values[0]
                 else:
@@ -113,7 +119,7 @@ def explain_instance(
                 background = np.zeros((1, X_instance.shape[1]))
                 explainer = shap.KernelExplainer(model.predict_proba, background)
                 shap_values = explainer.shap_values(X_instance, nsamples=100)
-                vals = shap_values[1][0]
+                vals = shap_values[1][0] if isinstance(shap_values, list) else shap_values[0]
                 method = "shap_kernel"
 
             n_feats = min(len(feature_names), len(vals))
@@ -140,6 +146,13 @@ def explain_instance(
     try:
         if hasattr(model, "feature_importances_"):
             importances = model.feature_importances_
+        elif hasattr(model, "models"):
+            first_m = (
+                model.models.get("LightGBM")
+                or model.models.get("XGBoost")
+                or list(model.models.values())[0]
+            )
+            importances = getattr(first_m, "feature_importances_", None)
         elif hasattr(model, "estimators_"):
             importances = model.estimators_[0].feature_importances_
         else:

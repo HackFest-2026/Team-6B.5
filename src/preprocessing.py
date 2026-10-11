@@ -194,27 +194,38 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     # ── Service utilization ───────────────────────────────────────────────
     for col in ("number_outpatient", "number_emergency", "number_inpatient"):
         if col in df.columns:
-            df[col] = df[col].fillna(0)
+            df[col] = df[col].fillna(0).astype(float)
+        else:
+            df[col] = pd.Series(0.0, index=df.index)
     df["prior_visits"] = (
-        df.get("number_outpatient", 0).astype(float)
-        + df.get("number_emergency", 0).astype(float)
-        + df.get("number_inpatient", 0).astype(float)
+        df["number_outpatient"]
+        + df["number_emergency"]
+        + df["number_inpatient"]
     )
 
     # ── LACE-style score ──────────────────────────────────────────────────
     # L = Length of stay (days)
-    los = df.get("time_in_hospital", pd.Series([3] * len(df))).fillna(3).astype(float)
+    if "time_in_hospital" in df.columns:
+        los = df["time_in_hospital"].fillna(3).astype(float)
+    else:
+        los = pd.Series(3.0, index=df.index)
     l_score = np.clip(los, 0, 14)  # cap at 14 for scoring
 
     # A = Acuity of admission (emergency=1, else 0)
-    a_score = df.get("admission_type_id", pd.Series([1] * len(df))).isin([1, 2]).astype(float)
+    if "admission_type_id" in df.columns:
+        a_score = df["admission_type_id"].isin([1, 2]).astype(float)
+    else:
+        a_score = pd.Series(1.0, index=df.index)
 
     # C = Comorbidity (number_diagnoses as proxy for Charlson)
-    n_diag = df.get("number_diagnoses", pd.Series([3] * len(df))).fillna(3).astype(float)
+    if "number_diagnoses" in df.columns:
+        n_diag = df["number_diagnoses"].fillna(3).astype(float)
+    else:
+        n_diag = pd.Series(3.0, index=df.index)
     c_score = np.clip(n_diag / 3.0, 0, 5)  # scale to 0-5 range
 
     # E = Emergency department visits in prior 6 months
-    ed = df.get("number_emergency", pd.Series([0] * len(df))).fillna(0).astype(float)
+    ed = df["number_emergency"]
     e_score = np.clip(ed, 0, 4)
 
     df["lace_score"] = l_score + a_score * 3 + c_score + e_score
@@ -223,8 +234,12 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     # ── Interaction terms ─────────────────────────────────────────────────
     df["los_x_ndiag"] = los * n_diag
     df["age_x_nmeds"] = df["age_mid"] * df["num_active_meds"]
-    df["ed_x_inpatient"] = ed * df.get("number_inpatient", pd.Series([0] * len(df))).fillna(0).astype(float)
-    df["insulin_x_a1c"] = df.get("insulin", pd.Series([0] * len(df))).fillna(0).astype(float) * df["a1c_ordinal"]
+    df["ed_x_inpatient"] = ed * df["number_inpatient"]
+    if "insulin" in df.columns:
+        ins = df["insulin"].fillna(0).astype(float)
+    else:
+        ins = pd.Series(0.0, index=df.index)
+    df["insulin_x_a1c"] = ins * df["a1c_ordinal"]
 
     # ── diabetesMed binary ────────────────────────────────────────────────
     if "diabetesMed" in df.columns:
